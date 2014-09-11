@@ -11,8 +11,18 @@
 #include <errno.h>
 #include <assert.h>
 #include <arpa/inet.h>
+#include <vector>
 #include "util.h"
 #include "request.h"
+
+void req_modfd( int epollfd, int fd, int ev, request *req)
+{
+    epoll_event event;
+    event.data.fd = fd;
+    event.data.ptr = (void *)req;
+    event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
+    epoll_ctl( epollfd, EPOLL_CTL_MOD, fd, &event );
+}
 
 int main(int argc, char *argv[])
 {
@@ -49,10 +59,12 @@ int main(int argc, char *argv[])
     addfd( epollfd, listenfd, false);
 
     datastore store;
+    std::vector<int> fdvector;
 
     while(true)
     {
-    	int number = epoll_wait( epollfd, events, MAX_EVENT_NUMBER, 1000*5000 );
+        sleep(3);
+    	int number = epoll_wait( epollfd, events, MAX_EVENT_NUMBER, 0);
         //printf("number = %d\n", number);
     	if( ( number < 0 ) && ( errno != EINTR ) )
     	{
@@ -75,7 +87,7 @@ int main(int argc, char *argv[])
     			}
 
     			struct epoll_event ev;
-    			ev.events = EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
+    			ev.events = EPOLLIN;//| EPOLLOUT | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
     			ev.data.fd = connfd;
 
     			request req( connfd, &store );
@@ -84,31 +96,38 @@ int main(int argc, char *argv[])
     			epoll_ctl( epollfd, EPOLL_CTL_ADD, connfd, &ev);
     			//setnonblocking( connfd );
 
-    			continue;
+    			//continue;
+                
     		}
     		else if ( events[i].events & ( EPOLLRDHUP | EPOLLHUP | EPOLLERR ) )
     		{
-    			continue;
+    			//continue;
     		} 
-    		if ( events[i].events & EPOLLIN )
+    		else if ( events[i].events & EPOLLIN )
     		{
-                //printf("server epoll in, fd=%d\n", events[i].data.fd);
+                printf("server epoll in, fd=%d\n", events[i].data.fd);
     			request *req = ( request * )events[i].data.ptr;
     			if( req != NULL )
     			{
-    				if( req->read() )
+    				if( req->getReceiveData() )
     				{
     					req->process();
     				}
     			}
+                req_modfd(epollfd, events[i].data.fd, EPOLLOUT, req);
 
     		} 
-            if ( events[i].events & EPOLLOUT )
+            else if ( events[i].events & EPOLLOUT )
     		{
-                //printf("server epoll out, fd=%d\n", events[i].data.fd);
+                printf("server epoll out, fd=%d\n", events[i].data.fd);
     			request *req = ( request * )events[i].data.ptr;
-    			req->write();
-    		} 
+    			if(req->sendResponseData()) {
+
+                }
+                req_modfd(epollfd, events[i].data.fd, EPOLLIN, req);
+    		} else {
+
+            }
     	}
     }
 

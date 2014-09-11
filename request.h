@@ -6,102 +6,116 @@
 #include <string>
 #include <vector>
 #include <cstdio>
-#include "locker.h"
+
+
+using namespace std;
 
 
 #define MAX_LEN 1024
 
-class datastore : public locker
-{
-public:
-	bool add(std::string str);
-public:
-	std::vector<std::string> m_store;
-};
-
-bool datastore::add(std::string data)
-{
-	std::string str(data);
-	lock();
-	m_store.push_back(str);
-	unlock();
-	return true;
-};
 
 
-class request
-{
-public:
-	request(int fd, datastore *store);
-	bool read();
-	bool write();
-	void process();
-private:
-	int m_fd;
-	int m_index;
-	datastore *m_datastore;
-	std::string m_data;
-};
+#define MSG_REQUEST_IP_TYPE 1
+#define MSG_CHAT_CONTENT_TYPE 2
+#define MSG_SUBSERVER_IP_TYPE 3
+#define MSG_RESPONSE_IP_TYPE 4
 
-request::request(int fd, datastore *store):
-		m_fd(fd), m_datastore(NULL)
+struct message
 {
-	m_datastore = store;
-	if( m_datastore != NULL )
-	{
-		m_datastore->lock();
-		m_index = m_datastore->m_store.size() - 1;
-		m_datastore->unlock();
-	}
-}
-
-bool request::read()
-{
+	int type;
 	char data[MAX_LEN];
-	memset(data, 0, sizeof(MAX_LEN));
+};
 
-	//int ret = recv(m_fd, data, MAX_LEN-1, 0 );
-	int ret = read(m_fd, data, 0);
-	if(ret > 0)
-	{
-		printf("fd=%d, recv: %s\n", m_fd, data);
-		std::string str(data);
-		m_data = str;
-		return m_datastore->add(str);
-	}
-	return false;
+
+char * msgToStr(struct message msg) {
+	char data[MAX_LEN + 8];
+	memset(data, 0, MAX_LEN + 8);
+	sprintf(data, "%c%s", msg.type, msg.data);
+	return data;
 }
 
-bool request::write()
+struct message strToMsg(char *data) {
+	struct message msg;
+	memset(&msg, 0, sizeof(msg));
+	msg.type = (int)data[0];
+	memcpy(msg.data, data + 1, strlen(data) - 1);
+	return msg;
+}
+struct message createMsg(int type, char *data)
 {
-	std::string str;
-	m_datastore->lock();
+	struct message msg;
+	msg.type = type;
+	memcpy(msg.data, data, strlen(data));
+	return msg;
+}
+
+
+class Request
+{
+public:
+	Request(struct message msg, int fd);
+	struct message getMsg();
+	bool isChatContentRequest();
+	void process();
+
+public:
+	int m_fd;
+private:
+	void handleRequestIP();
+	void handleChatContent();	
+	void handleSubServerIP();
+	void handleResponseIP();
+private:
+	struct message m_msg;
 	
-	int i = m_index;
-	//printf("fd( %d ): write.... index = %d, store.size=%d\n", m_fd, m_index, m_datastore->m_store.size());
-	while( i < m_datastore->m_store.size())
-	{
-		str = m_datastore->m_store.at(i);
-		//int ret = send(m_fd, (char *)str.data(), str.length(), 0);
-		int ret = write(m_fd, (char *)str.data(), 0);
-		if(ret < 0 )
-		{
-			m_datastore->unlock();
-			printf( "fd(%d) send %ith data failed !\n", m_fd, i );
-			m_index = i;
-			return false;
-		}
-		printf("fd=%d, send: %s\n", m_fd, (char *)str.data());
-		i++;	
-	}
-	m_index = m_datastore->m_store.size();
-	m_datastore->unlock();
-	return true;
+};
+
+Request::Request(struct message msg, int fd) : 
+			m_msg(msg), m_fd(fd){
 
 }
+struct message Request::getMsg() {
+	return m_msg;
+}
+void Request::handleChatContent() {
+	cout << "content: " << m_msg.data << endl;
+}
 
-void request::process()
+bool Request::isChatContentRequest()
+{
+	return (m_msg.type == MSG_CHAT_CONTENT_TYPE) ;
+}
+void Request::handleSubServerIP()
 {
 
-	printf("%s\n", (char *)m_data.data());
+}
+void Request::handleResponseIP()
+{
+
+}
+void Request::handleRequestIP()
+{
+
+}
+void Request::process()
+{
+	cout << "msg type: " << m_msg.type << endl;
+	switch( m_msg.type ) {
+		
+		case MSG_CHAT_CONTENT_TYPE:
+			handleChatContent();
+			break;
+		case MSG_REQUEST_IP_TYPE:
+			handleRequestIP();
+
+		case MSG_RESPONSE_IP_TYPE:
+			handleResponseIP();
+
+		case MSG_SUBSERVER_IP_TYPE:
+			handleSubServerIP();
+
+		default:
+			cout<< "process other handle !" << endl;
+			break;
+	};
 }
