@@ -1,9 +1,23 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 #include <fcntl.h>
-
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <stdio.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #define MAX_EVENT_NUMBER 1024
 #define MAX_BUFFER_LEN 1024
+void print_event(struct epoll_event ev)
+{
+    int event_types[5] = { EPOLLIN, EPOLLOUT, EPOLLRDHUP, EPOLLERR, EPOLLET};
+    char event_name[5][32] = { "EPOLLIN", "EPOLLOUT", "EPOLLRDHUP", "EPOLLERR", "EPOLLET"};
+    for(int i = 0; i < (int)sizeof(event_types); i++ ) {
+        if( ev.events & event_types[i] ) {
+            printf("fd: %d, event: %s \n", ev.data.fd, event_name[i]);   
+        } 
+    }
+}
 int setnonblocking( int fd )
 {
     int old_option = fcntl( fd, F_GETFL );
@@ -47,5 +61,17 @@ void epoll_remove(int epollfd, int fd)
     close( fd );
 }
 
-
+int accept_client(int epollfd, int listenfd )
+{
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len = sizeof( client_addr_len );
+    int connfd = accept( listenfd, ( struct sockaddr * )&client_addr, &client_addr_len );
+    if( connfd <= 0 ) {
+        printf("accept new client failed!\n");
+    } else {
+        printf("accept new client , fd = %d\n", connfd);
+        epoll_add(epollfd, connfd);
+    }
+    return connfd;
+}
 

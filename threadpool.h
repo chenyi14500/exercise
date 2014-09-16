@@ -5,11 +5,11 @@
 #include "locker.h"
 
 template <typename T>
-class threadpool
+class Threadpool
 {
 public:
-	threadpool(int thread_number = 8, int max_request = 10000)
-	~threadpool();
+	Threadpool(int thread_number = 8, int max_request = 10000);
+	~Threadpool();
 	bool append(T* request);
 
 private:
@@ -20,20 +20,20 @@ private:
 	int m_thread_number;
 	int m_max_requests;
 	pthread_t *m_threads;
-	std:list<T *> m_workquque;
+	std::list<T*> m_workquque;
 	locker m_queuelocker;
 	sem m_queuestat;
 	bool m_stop;
 };
 
 template< typename T>
-threadpool<T> :: threadpool(int thread_number, int max_request):
+Threadpool<T> :: Threadpool(int thread_number, int max_request):
 			m_thread_number(thread_number), m_max_requests(max_request),
 			m_stop(false), m_threads(NULL)
 {
 	if((m_thread_number <= 0) || (m_max_requests <= 0))
 	{
-		throw std:exception();
+		throw std::exception();
 	}
 
 	m_threads = new pthread_t[m_thread_number];
@@ -56,25 +56,24 @@ threadpool<T> :: threadpool(int thread_number, int max_request):
 			delete [] m_threads;
 			throw std::exception();
 		}
-		}
 	}
 }
 
 template<typename T>
-threadpool< T > :: ~threadpool()
+Threadpool< T > :: ~Threadpool()
 {
 	delete [] m_threads;
 	m_stop = true;
 }
 
 template< typename T >
-bool threadpool< T >:: append(T * request)
+bool Threadpool< T >:: append(T * request)
 {
 	m_queuelocker.lock();
 	if(m_workquque.size() > m_max_requests )
 	{
 		m_queuelocker.unlock();
-		retuen false;
+		return false;
 	}
 
 	m_workquque.push_back(request);
@@ -84,15 +83,15 @@ bool threadpool< T >:: append(T * request)
 }
 
 template < typename T >
-void * threadpool< T >::worker(void * arg)
+void * Threadpool< T >::worker(void * arg)
 {
-	threadpool *pool = (threadpool *)arg;
+	Threadpool *pool = (Threadpool *)arg;
 	pool->run();
 	return pool;
 }
 
 template< typename T >
-void threadpool< T > ::run()
+void Threadpool< T > ::run()
 {
 	while( !m_stop )
 	{
@@ -111,8 +110,5 @@ void threadpool< T > ::run()
 			continue;
 		}
 		request->process();
-	}
-}
-		}
 	}
 }

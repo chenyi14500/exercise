@@ -12,7 +12,7 @@ using namespace std;
 
 
 #define MAX_LEN 1024
-
+#define MAX_BUFFER_LEN 1024
 
 
 #define MSG_REQUEST_IP_TYPE 1
@@ -20,102 +20,122 @@ using namespace std;
 #define MSG_SUBSERVER_IP_TYPE 3
 #define MSG_RESPONSE_IP_TYPE 4
 
-struct message
-{
-	int type;
-	char data[MAX_LEN];
-};
-
-
-char * msgToStr(struct message msg) {
-	char data[MAX_LEN + 8];
-	memset(data, 0, MAX_LEN + 8);
-	sprintf(data, "%c%s", msg.type, msg.data);
-	return data;
-}
-
-struct message strToMsg(char *data) {
-	struct message msg;
-	memset(&msg, 0, sizeof(msg));
-	msg.type = (int)data[0];
-	memcpy(msg.data, data + 1, strlen(data) - 1);
-	return msg;
-}
-struct message createMsg(int type, char *data)
-{
-	struct message msg;
-	msg.type = type;
-	memcpy(msg.data, data, strlen(data));
-	return msg;
-}
-
-
 class Request
 {
 public:
-	Request(struct message msg, int fd);
-	struct message getMsg();
-	bool isChatContentRequest();
+	Request(char *buffer, int len, int fd);
 	void process();
-
 public:
 	int m_fd;
 private:
-	void handleRequestIP();
-	void handleChatContent();	
-	void handleSubServerIP();
-	void handleResponseIP();
-private:
-	struct message m_msg;
+	void displayMsg();
+public:
+	int type;
+	char data[MAX_LEN];
 	
 };
 
-Request::Request(struct message msg, int fd) : 
-			m_msg(msg), m_fd(fd){
+Request::Request(char *buffer, int len, int fd): m_fd(fd) {
+	if ( buffer == NULL || len <= 0 ) return ;
+	type = (int)buffer[0];
 
-}
-struct message Request::getMsg() {
-	return m_msg;
-}
-void Request::handleChatContent() {
-	cout << "content: " << m_msg.data << endl;
+	memset(data, 0, MAX_LEN );
+	memcpy(data, buffer+1, len-1);
 }
 
-bool Request::isChatContentRequest()
-{
-	return (m_msg.type == MSG_CHAT_CONTENT_TYPE) ;
-}
-void Request::handleSubServerIP()
-{
-
-}
-void Request::handleResponseIP()
-{
-
-}
-void Request::handleRequestIP()
-{
-
+void Request::displayMsg() {
+	cout << "fd( " << m_fd << " ) : " << data << endl;
 }
 void Request::process()
 {
-	cout << "msg type: " << m_msg.type << endl;
-	switch( m_msg.type ) {
-		
-		case MSG_CHAT_CONTENT_TYPE:
-			handleChatContent();
-			break;
-		case MSG_REQUEST_IP_TYPE:
-			handleRequestIP();
+	displayMsg();
 
-		case MSG_RESPONSE_IP_TYPE:
-			handleResponseIP();
+}
 
-		case MSG_SUBSERVER_IP_TYPE:
-			handleSubServerIP();
+class Role
+{
+public:
+	Role();
+	void readFrom(int fd);
+	void writeTo(int fd);
+public:
+	char  buffer[MAX_BUFFER_LEN];
+	char *buffer_ptr;
+};
+Role::Role()
+{
+	memset(buffer, 0, MAX_BUFFER_LEN);
+	buffer_ptr = buffer;
+}
+void Role::readFrom(int fd)
+{
+	int  len = MAX_BUFFER_LEN - (buffer_ptr - buffer);
+	memset(buffer_ptr, 0, len);
+	int ret = recv(fd, buffer_ptr, len, 0);
+	if( ret < 0 ) {
+		cout << "read fd( " << fd << " ) msg failed " << endl;
+	}
+}
+void Role::writeTo(int fd)
+{
+	int ret = send(fd, buffer_ptr, strlen(buffer_ptr), 0);
+	if( ret < len ) {
+		cout << "send fd( " << fd << " ) msg failed " << endl;
+	}
+}
+class Talker : public  Role
+{
+public:
+	void sendChatMsg(char *chatContent, int len);
+	void displayChatMsg();
+public:
+	int chatroomfd;
+};
+void Talker::sendChatMsg()
+{
+	buffer_ptr = buffer+1;
+	readFrom(0);
+	buffer[0] = MSG_CHAT_CONTENT_TYPE;
+	buffer_ptr = buffer;
+	writeTo(chatroomfd);
+};
 
-		default:
-			cout<< "process other handle !" << endl;
-			break;
-	};
+class ChatRoom : public Role
+{
+public:
+	void connMaster();
+	void broadcastMsg();
+	void receiveMsg(int fd);
+	void receiveIP();
+	int connChatRoom(char *ip, int port);
+public:
+	vector<int> talkerfd;
+	queue<string> msgQueue;
+	int masterfd;
+};
+void ChatRoom::receiveMsg(int fd)
+{
+	buffer_ptr = buffer;
+	readFrom(fd);
+	string msg(buffer);
+	msgQueue.push_back(msg);
+}
+void ChatRoom::broadcastMsg()
+{
+	while(msgQueue.size() > 0) {
+		string msg = msgQueue.front();
+		buffer_ptr = msg.data();
+		for(int i = 0; i < (int)talkerfd.size(); i++ ) {
+			int fd = talkerfd.at(i);
+			writeTo(fd);
+		}
+		msgQueue.pop();
+	}
+}
+
+class Master
+{
+public:
+	void sendIP(int fd);
+	void handleRequest(char *buffer, int fd);
 }

@@ -14,35 +14,9 @@
 #include <vector>
 #include <queue>
 #include <iostream>
-#include "epoll_util.h"
-#include "request.h"
+#include "epollutil.h"
+#include "task.h"
 using namespace std;
-
-
-/*void send_all_client_msg(int fd, char *data, int len, vector<int> v)
-{
-    printf("send data from fd(%d), data length = %d, client num = %d\n",
-            fd, len, v.size());
-    for ( int i = 0; i < (int)v.size(); i++ ) {
-        int sendfd = v.at(i);
-        if( sendfd == fd) continue;
-        int rc = write(sendfd, data, len);
-        printf("send fd(%d), data length = %d\n", sendfd, rc); 
-    }
-}*/
-
-void print_event(struct epoll_event ev)
-{
-    int event_types[5] = { EPOLLIN, EPOLLOUT, EPOLLRDHUP, EPOLLERR, EPOLLET};
-    char event_name[5][32] = { "EPOLLIN", "EPOLLOUT", "EPOLLRDHUP", "EPOLLERR", "EPOLLET"};
-    printf("fd = %d, ", ev.data.fd);
-    for(int i = 0; i < (int)sizeof(event_types); i++ ) {
-        if( ev.events & event_types[i] ) {
-            cout << " " << event_name[i] ;    
-        } 
-    }
-    cout << endl;
-}
 
 int main(int argc, char *argv[])
 {
@@ -80,10 +54,17 @@ int main(int argc, char *argv[])
 
     cout << "listenfd = " << listenfd << endl;
 
-    char data[1024];
+    Threadpool<Task> pool(2, 1000);
     std::vector<int> fdv;
-    std::queue<Request> reqv;
-    
+    locker fdvlocker;
+
+    char data[MAX_BUFFER_LEN];
+
+    Task *basetask = new Task(NULL);
+    basetask->m_pool = &pool;
+    basetask->m_fdvlocker = &fdvlocker;
+    basetask->m_fdv = &fdv;
+
     while(true)
     {
 
@@ -105,34 +86,26 @@ int main(int argc, char *argv[])
             } else if ( events[i].data.fd == listenfd ) {
                 int connfd = accept_client(epollfd, listenfd);
                 if( connfd > 0 ) {
+                    fdvlocker.lock();
                     fdv.push_back(connfd);
+                    fdvlocker.unlock();
                 }
             } else {
-                print_event(events[i]);
+                //print_event(events[i]);
 
                 if(events[i].events & EPOLLIN) {
-                    memset(data, 0, MAX_LEN);
-                    int rc = epoll_read(events[i].data.fd, data, MAX_LEN);
+                    memset(data, 0, MAX_BUFFER_LEN);
+                    int rc = epoll_read(events[i].data.fd, data, MAX_BUFFER_LEN);
                     if( rc <= 0 ) continue ;
-
-                    Request req(data, rc, events[i].data.fd);
-                    req.process();
-                    reqv.push(req);
-                    //send_all_client_msg(events[i].data.fd, data, rc, v);
-
+                    Task *task = new Task(basetask);
+                    task->m_type = DISPLAY_MSG_TASK_TYPE;
+                    task->m_data = string(data);
+                    task->m_pool->append(task);
+                    task->m_sendfd = events[i].data.fd;
                 }
             }
     		
     	}
-        while(reqv.size() > 0 ) {
-            Request r = reqv.front();
-            for( int j = 0; j <  (int)fdv.size(); j++ ) {
-                int fd = fdv.at(j);
-                if( r.m_fd == fd) continue;
-                int ret = epoll_write(fd, r.data, strlen(r.data));
-            }
-            reqv.pop();
-        }
     }
 
 
