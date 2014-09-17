@@ -14,9 +14,36 @@ struct ip_port
 	int clients_num;
 };
 
-int get_request_type( char * request_buffer );
-struct ip_port get_ip_port_from_content( char *request_content );
-int create_send_buffer( int type, char *content, int len );
-int fill_ip_response( char *response_buffer, struct ip_port ipp );
-int server_ip_response( char *response_buffer );
+// server ip, server port, client number 
+struct s_ipp
+{
+	struct ip_port ipp;
+	int client_num;
+};
+
+int get_request_type( char * request_buffer ) {
+	if( request_buffer == NULL ) return -1;
+	return (int)request_buffer[0];
+}
+
+struct ip_port get_ip_port_from_content( char *request_content ) {
+	struct ip_port ipp;
+	sscanf(requst_buffer, "%d %s", &ipp.port, ipp.ip);
+	std::cout << "ip: " << ipp.ip << ", port : " << ipp.port << endl;
+	return ipp;
+}
+
+int fill_client_ip_response( char *response_buffer, struct ip_port ipp ) {
+	memset(response_buffer, 0, MAX_BUFFER_LEN);
+	char *response_content = response_buffer + 1;
+	int len = sprintf(response_content, "%d %s", ipp.port, ipp.ip);
+	response_buffer[0] = (char)CLIENT_IP_RESPONSE;
+	return len + 1;
+}
+	
+int fill_server_ip_response( char *response_buffer, std::vector<struct ip_port> *s_vec) {
+	memset(response_buffer, 0, MAX_BUFFER_LEN);
+	char *response_content = response_buffer + 1;
+	
+	
 struct ip_port get_ip_port_from_server_vector( std::vector<struct ip_port> *s_vec );
