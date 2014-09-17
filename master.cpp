@@ -14,9 +14,10 @@
 #include <vector>
 #include <queue>
 #include <iostream>
-#include "epollutil.h"
-#include "task.h"
 using namespace std;
+
+#include "message.h"
+#include "util.h"
 
 int main(int argc, char *argv[])
 {
@@ -54,17 +55,6 @@ int main(int argc, char *argv[])
 
     cout << "listenfd = " << listenfd << endl;
 
-    Threadpool<Task> pool(2, 1000);
-    std::vector<int> fdv;
-    locker fdvlocker;
-
-    char data[MAX_BUFFER_LEN];
-
-    Task *basetask = new Task(NULL);
-    basetask->m_pool = &pool;
-    basetask->m_fdvlocker = &fdvlocker;
-    basetask->m_fdv = &fdv;
-
     while(true)
     {
 
@@ -85,24 +75,25 @@ int main(int argc, char *argv[])
                 continue ;
             } else if ( events[i].data.fd == listenfd ) {
                 int connfd = accept_client(epollfd, listenfd);
-                if( connfd > 0 ) {
-                    fdvlocker.lock();
-                    fdv.push_back(connfd);
-                    fdvlocker.unlock();
-                }
             } else {
-                //print_event(events[i]);
-
                 if(events[i].events & EPOLLIN) {
-                    memset(data, 0, MAX_BUFFER_LEN);
-                    int rc = epoll_read(events[i].data.fd, data, MAX_BUFFER_LEN);
-                    if( rc <= 0 ) continue ;
-                    Task *task = new Task(basetask);
-                    task->m_type = DISPLAY_MSG_TASK_TYPE;
-                    task->m_data = string(data);
-                    task->m_pool->append(task);
-                    task->m_sendfd = events[i].data.fd;
-                }
+			int fd = events[i].data.fd;
+			memset(buffer, 0, MAX_BUFFER_LEN);
+			int len = epoll_read(fd, buffer, MAX_BUFFER_LEN);
+			int type = get_request_type(buffer);
+			if( type == CLIENT_IP_REQUEST ) {
+				struct ip_port ipp = get_ip_port_from_server_vector( &s_vec );
+				len = fill_client_ip_response(buffer, ipp);
+			} else if ( type == SERVER_IP_EWQUEST ) {
+				struct ip_port ipp = get_ip_port_from_content( buffer );
+				s_vec.push_back( ipp );
+				len = fill_server_ip_response(buffer, &s_vec );
+			} else {
+				cout << "unknoew request type !" << endl;
+				continue;
+			}
+			epoll_write(fd, buffer, len );
+		}
             }
     		
     	}
