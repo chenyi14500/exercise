@@ -8,6 +8,29 @@
 #include <arpa/inet.h>
 #define MAX_EVENT_NUMBER 1024
 #define MAX_BUFFER_LEN 1024
+int conn_server(char *ip, int port) {
+	struct sockaddr_in server_address;
+    bzero( &server_address, sizeof( server_address ) );
+    server_address.sin_family = AF_INET;
+    inet_pton( AF_INET, ip, &server_address.sin_addr );
+    server_address.sin_port = htons( port );
+
+    int sockfd = socket( PF_INET, SOCK_STREAM, 0 );
+    assert( sockfd >= 0 );
+    if ( connect( sockfd, ( struct sockaddr* )&server_address, sizeof( server_address ) ) < 0 ){ 
+		printf( "connection failed\n" );
+        close( sockfd );
+        return -1;
+    }
+}
+int get_msg_type( char * msg)
+{
+  if( msg == NULL ) {
+    return -1;
+  }  
+  return (int)msg[0];
+}
+
 void print_event(struct epoll_event ev)
 {
     int event_types[5] = { EPOLLIN, EPOLLOUT, EPOLLRDHUP, EPOLLERR, EPOLLET};
