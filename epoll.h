@@ -58,17 +58,42 @@ epoll::~epoll() {
 	free(events);
 };
 
-class fdset
+class fdvector
 {
 public:
 	void add(int fd);
 	void remove(int fd);
 	int size();
-	int getfd(int index);
+	int getFdByIndex(int index);
 private:
-	std::vector<int> set;
-	locker setlocker;
+	std::vector<int> vec;
+	locker veclocker;
 };
+
+void fdvector::add(int fd) {
+	veclocker.lock();
+	vec.push_bacK(fd);
+	veclocker.unlock();
+};
+
+void fdvector::remove(int fd) {
+	veclocker.lock();
+	for( int i = 0; i < (int)vec.size(); i++) {
+		if( vec[i] == fd ) {
+			vec.erase(vec.begin() + i );
+			break;
+		}
+	}
+	veclocker.unlock();
+};
+
+int fdvector::size() {
+	return (int)vec.size();
+};
+
+int fevctor::getFdByIndex(int index) {
+	return vec[i];
+};	
 
 
 		
